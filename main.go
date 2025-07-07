@@ -1,46 +1,27 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"go_crawling/crawler"
-	"go_crawling/db"
+	"github.com/shlee2227/go_crawling/internal/middleware/db"
+
+	controller "github.com/shlee2227/go_crawling/internal/controller/search"
+	repository "github.com/shlee2227/go_crawling/internal/repository/search"
+	service "github.com/shlee2227/go_crawling/internal/service/search"
 )
 
-func ping (c *gin.Context) {
+func ping(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "pong",
 	})
 }
 
-func db_ping (c *gin.Context) {
-	err := db.Conn.Ping()
-	if err != nil {
-		c.JSON(500, gin.H{"message": "DB 연결 실패"})
-	}
-	c.JSON(200, gin.H{"message": "DB 연결됨"})
-}
-
-func searchAndStore (c *gin.Context) {
-	searchWord := c.Query("search_word")
-	fmt.Println(searchWord)
-	err := crawler.SearchAndStoreData(searchWord)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message":"검색 및 저장에 실패"})
-	
-	}
-	c.JSON(http.StatusCreated, gin.H{"message":"검색 및 저장 성공"})
-}
-	
-
-
 func main() {
-	// ENV 로드
+	// ENV 로드s
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("ENV 로드 실패")
 	}
@@ -49,18 +30,21 @@ func main() {
 	db.Init()
 	defer db.Close()
 
+	// 의존성 주입
+	repository := repository.NewRepository(db.DB)
+	service := service.NewService(repository)
+	controller := controller.NewNaverController(service)
+
+
 	// SERVER
 	r := gin.Default()
 
 	// basic
 	r.GET("/ping", ping)
 
-	// DB
-	r.GET("/db_ping", db_ping)
-
-	// crawling 
-	r.POST("/search", searchAndStore)
-	// r.GET("/data")
+	// Routes
+	db.RegisterRoutes(r)
+	controller.RegisterRoutes(r)
 
 	log.Println("Server 시작")
 	r.Run(":8000")
